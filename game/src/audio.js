@@ -94,5 +94,7 @@ export function createAudio() {
     buy() { burst({ freq: 880, dur: 0.06, type: 'sine', gain: 0.25 }); },
     denied() { burst({ freq: 180, dur: 0.12, type: 'square', gain: 0.2 }); },
     throwGrenade() { burst({ freq: 300, dur: 0.08, noise: 0.25, lowpass: 2000 }); },
+    step() { burst({ freq: 140, dur: 0.05, noise: 0.14, lowpass: 700 }); },
+    flashPop() { burst({ freq: 1800, dur: 0.12, type: 'sine', gain: 0.35 }); burst({ freq: 2400, dur: 0.08, type: 'sine', gain: 0.2 }); },
   };
 }

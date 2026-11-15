@@ -33,6 +33,7 @@ export function createPlayer(colliders) {
     eye: STAND_EYE,
     health: 100,
     vest: false,
+    helmet: false,
     alive: true,
     crouching: false,
     loadout: {},
@@ -49,7 +50,9 @@ export function createPlayer(colliders) {
     a.weaponId = 'p9';
     a.frags = 0;
     a.smokes = 0;
+    a.flashes = 0;
     a.vest = false;
+    a.helmet = false;
   }
 
   function look(dx, dy, sensitivity = 0.0022) {
@@ -100,11 +103,13 @@ export function createPlayer(colliders) {
     return Math.hypot(body.velocity.x, body.velocity.z);
   }
 
-  // Vest absorbs half the damage; returns true when this damage killed.
-  function damage(amount) {
+  // Vest halves all damage; a helmet halves headshots only. The two stack,
+  // so a headshot against vest + helmet deals a quarter of its damage.
+  function damage(amount, part = 'body') {
     if (!actor.alive) return false;
     let dealt = amount;
-    if (actor.vest) dealt = Math.round(amount * 0.5);
+    if (actor.vest) dealt = Math.round(dealt * 0.5);
+    if (part === 'head' && actor.helmet) dealt = Math.round(dealt * 0.5);
     actor.health -= dealt;
     if (actor.health <= 0) {
       actor.health = 0;

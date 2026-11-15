@@ -1,7 +1,9 @@
-// Bots: 3 allies and 4 enemies with a four-state FSM — PATROL along the
-// waypoint graph, ALERT toward a sound, ENGAGE when they see an enemy,
-// HUNT toward the last known position — plus HOLD, PLANT and DEFUSE roles
-// for the objective (criterion 3: routes, holds, reactions to sight/sound).
+// Bots: 4 allies and 5 enemies in a 5v5 match, with a four-state FSM —
+// PATROL along the waypoint graph, ALERT toward a sound, ENGAGE when
+// they see an enemy, HUNT toward the last known position — plus HOLD,
+// PLANT and DEFUSE roles for the objective (criterion 3: routes, holds,
+// reactions to sight/sound). A flash grenade blinds a bot for a few
+// seconds (ai.blindUntil); a blinded bot stands still and cannot shoot.
 import * as THREE from 'three';
 import { BODY_HEIGHT, moveBody } from './move.js';
 import { WEAPONS } from './state.js';
@@ -91,7 +93,7 @@ export function createBots(state, world, scene, combat) {
         reaction: 0, burstLeft: 0, burstTimer: 0, pauseTimer: 0,
         strafeDir: 1, strafeTime: 0, losTimer: 0, scanTimer: 0,
         holdPos: null, holdYaw: 0, thinkTimer: 0, progress: 0,
-        carriesBomb: false, seedOffset: index * 0.37,
+        carriesBomb: false, seedOffset: index * 0.37, blindUntil: 0,
       },
     };
     bot.loadout[bot.weaponId] = { mag: WEAPONS[bot.weaponId].mag, reserve: 999 };
@@ -101,14 +103,14 @@ export function createBots(state, world, scene, combat) {
   function spawnAll() {
     for (const b of bots) scene.remove(b.group);
     bots.length = 0;
-    const allyRoles = ['rifle', 'rifle', 'sniper'];
-    const enemyRoles = ['rifle', 'rifle', 'sniper', 'rifle'];
-    for (let i = 0; i < 3; i += 1) {
+    const allyRoles = ['rifle', 'rifle', 'sniper', 'rifle'];
+    const enemyRoles = ['rifle', 'rifle', 'sniper', 'rifle', 'rifle'];
+    for (let i = 0; i < 4; i += 1) {
       const b = makeBot('kestrel', i, allyRoles[i], i < 2 ? 'A' : 'B');
       bots.push(b);
     }
-    for (let i = 0; i < 4; i += 1) {
-      const b = makeBot('warden', i, enemyRoles[i], i < 2 ? 'A' : 'B');
+    for (let i = 0; i < 5; i += 1) {
+      const b = makeBot('warden', i, enemyRoles[i], i < 3 ? 'A' : 'B');
       bots.push(b);
     }
     state.bots = bots;
@@ -181,6 +183,12 @@ export function createBots(state, world, scene, combat) {
   function stepBot(bot, dt, now) {
     const ai = bot.ai;
     if (!bot.alive) return;
+    // Flashed: stand still, see nothing, shoot nothing until it wears off.
+    if (now < ai.blindUntil) {
+      bot.group.position.set(bot.body.position.x, bot.body.position.y, bot.body.position.z);
+      bot.group.rotation.y = bot.yaw;
+      return;
+    }
     ai.thinkTimer -= dt;
     ai.losTimer -= dt;
 
@@ -297,13 +305,17 @@ export function createBots(state, world, scene, combat) {
         const aimZ = t.body.position.z + (state.random() * 2 - 1) * err * dist * 0.6;
         moveBody(world.colliders, bot.body, dt, px * 0.4, pz * 0.4, BOT_SPEED * 0.5, 30, 8);
         void wantX; void wantZ;
-        // Burst fire after the reaction delay.
+        // Burst fire after the reaction delay. The pause between bursts is
+        // long on purpose: with ten guns on a 5v5 map, short pauses end
+        // rounds by elimination in half a minute and the bomb never
+        // matters. Longer pauses keep rounds tactical — holds, rotations,
+        // utility — instead of a single crossfire.
         if (ai.reaction > 0) { ai.reaction -= dt; break; }
         if (ai.burstLeft <= 0) {
           ai.pauseTimer -= dt;
           if (ai.pauseTimer > 0) break;
           ai.burstLeft = 3 + Math.floor(state.random() * 2);
-          ai.pauseTimer = 0.8 + state.random() * 0.7;
+          ai.pauseTimer = 1.3 + state.random() * 0.8;
         }
         ai.burstTimer -= dt;
         if (ai.burstTimer <= 0) {
@@ -323,7 +335,7 @@ export function createBots(state, world, scene, combat) {
         const site = world.sites.find((s) => s.id === bot.site);
         if (walkToward(bot, site.x, site.z, dt, BOT_SPEED)) {
           ai.progress += dt;
-          if (ai.progress >= 3) combat.plantBomb(bot, site);
+          if (ai.progress >= site.plantTime) combat.plantBomb(bot, site);
         }
         break;
       }

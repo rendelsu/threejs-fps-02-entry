@@ -14,20 +14,26 @@ http://localhost:8080) and click to play. No network needed.
   (hold, inside a site), **Ctrl** crouch, **Space** jump, **right-click**
   zoom with the DMR
 - **Buy phase** (15 s before each round): spend your money on the VK-7
-  carbine, Hornet SMG, Longbow DMR, grenades and a plate vest. Kills pay
-  $300, a round win $3,250, a loss $1,900 and growing.
+  carbine, Hornet SMG, Longbow DMR, grenades and a plate vest or ballistic
+  helmet. Kills pay $300, a round win $3,250, a loss $1,900 and growing.
 
 ## The game
 
-- 4v4 against bots with a four-state AI: patrol routes, alert on sound,
+- 5v5 against bots with a four-state AI: patrol routes, alert on sound,
   engage with burst fire and strafing, hunt the last known position.
   Defenders hold the sites; attackers push three lanes to plant.
+- Utility: frag, smoke and flash grenades (a flash whites out anyone
+  facing the burst, bots included), a plate vest and a helmet that halves
+  headshot damage. Each round names its MVP; the match names one too.
 - Gunplay: hitscan with headshots, recoil and spread that punish firing on
   the move, crouch to steady your aim, movement with acceleration and
   collision against the map.
+- Two sites that play differently: Crane Bay plants in 3 s behind pillars,
+  Silo Row takes 4 s on open ground.
 - Fixed 60 Hz simulation kept apart from rendering, one state object, no
   allocation in the hot loop (pooled tracers, scratch vectors).
-- Sounds are synthesised with WebAudio — no audio files.
+- Sounds are synthesised with WebAudio — no audio files: gunfire, reloads,
+  footsteps, the plant beeper, round stingers.
 
 ## Files
 

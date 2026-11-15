@@ -1,13 +1,15 @@
 // DUSTFALL — boot and the one loop (judge criteria, mapped to files):
 // 1 complete game: this file (rounds, HUD, bomb) + bots.js + combat.js.
 // 2 gunplay/movement: weapons.js (spread, recoil) + player.js/move.js.
-// 3 tactics: state.js (money, weapons) + bots.js (FSM) + combat.js (bomb).
-// 4 map/look: world.js (Kestrel Yard) + palette.js.
+// 3 tactics: state.js (money, weapons, flash, helmet) + bots.js (FSM) +
+//    combat.js (bomb, grenades, MVP tallies).
+// 4 map/look: world.js (Kestrel Yard, 5v5 spawns, two distinct sites) +
+//    palette.js.
 // 5 code: fixed 60 Hz sim apart from rendering, one state object (state.js),
 //    no allocation in the hot loop (pooled tracers, scratch vectors).
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
-import { createState, WEAPONS, WIN_SCORE, MAX_ROUNDS, ROUND_TIME, BUY_TIME, FREEZE_TIME, PLANT_TIME, FUSE_TIME, START_MONEY, WIN_REWARD, LOSS_REWARD, LOSS_BONUS_STEP, LOSS_BONUS_MAX, PLANT_REWARD, KILL_REWARD } from './state.js';
+import { createState, WEAPONS, WIN_SCORE, MAX_ROUNDS, ROUND_TIME, BUY_TIME, FREEZE_TIME, PLANT_TIME, FUSE_TIME, START_MONEY, WIN_REWARD, LOSS_REWARD, LOSS_BONUS_STEP, LOSS_BONUS_MAX, PLANT_REWARD, KILL_REWARD, GRENADE_FRAG, GRENADE_SMOKE, GRENADE_FLASH, VEST, HELMET } from './state.js';
 import { createWorld } from './world.js';
 import { createPlayer } from './player.js';
 import { createWeaponRig } from './weapons.js';
@@ -41,12 +43,14 @@ const audio = createAudio();
 const combat = createCombat(state, world, scene, audio);
 const playerApi = createPlayer(world.colliders);
 const player = playerApi.actor;
-player.damage = (amount) => playerApi.damage(amount); // combat.js calls actor.damage
+player.damage = (amount, part) => playerApi.damage(amount, part); // combat.js calls actor.damage
 state.player = player;
 const botsApi = createBots(state, world, scene, combat);
 const rig = createWeaponRig(camera);
 const hud = createHud(world);
 const input = createInput(renderer.domElement, onLockChange);
+// combat.js blinds the player through this hook (a flash grenade burst).
+state.flashBlind = (seconds) => hud.flashBlind(seconds);
 
 const rayOrigin = new THREE.Vector3();
 const rayDir = new THREE.Vector3();
@@ -61,6 +65,8 @@ let minimapTimer = 0;
 let buyEdge = new Set();
 let beepTimer = 0;
 let buyOpen = false;
+let lastStepX = 0;
+let lastStepZ = 15;
 
 // ---- round flow ----
 function resetBomb() {
@@ -85,6 +91,7 @@ function placeEveryone() {
 function startBuyPhase() {
   state.phase = 'buy';
   state.phaseTime = BUY_TIME;
+  state.roundKills = {};
   resetBomb();
   placeEveryone();
   if (!player.alive) playerApi.resetLoadout();
@@ -130,9 +137,10 @@ function endRound(winner, reason) {
   state.money += winner === 'kestrel' ? WIN_REWARD : lossPay;
   if (winner === 'kestrel') audio.roundWin();
   else audio.roundLose();
+  const mvp = roundMvp();
   hud.showBanner(
     winner === 'kestrel' ? 'ROUND WON' : 'ROUND LOST',
-    `${reason} — Kestrels ${state.score.kestrel} : ${state.score.warden} Wardens`,
+    `${reason} — Kestrels ${state.score.kestrel} : ${state.score.warden} Wardens${mvp ? ` — MVP: ${mvp}` : ''}`,
     3800,
   );
   hud.setScore(state.score.kestrel, state.score.warden, state.round);
@@ -145,8 +153,31 @@ function endMatch() {
   const k = state.score.kestrel;
   const w = state.score.warden;
   const title = k > w ? 'VICTORY — THE YARD IS YOURS' : k < w ? 'DEFEAT — THE WARDENS HOLD' : 'DRAW';
-  hud.showOverlay('end', { title, sub: `Final score Kestrels ${k} : ${w} Wardens. ${state.kills} kills, ${state.shotsHit}/${state.shotsFired} shots on target.` });
+  const mvp = matchMvp();
+  hud.showOverlay('end', { title, sub: `Final score Kestrels ${k} : ${w} Wardens. ${state.kills} kills, ${state.shotsHit}/${state.shotsFired} shots on target.${mvp ? ` Match MVP: ${mvp}.` : ''}` });
   input.releaseLock();
+}
+
+// The round's top killer, as a short line for the banner. Returns null
+// when nobody killed anyone (a round won on the clock, say).
+function roundMvp() {
+  let best = null;
+  let bestKills = 0;
+  for (const id of Object.keys(state.roundKills)) {
+    if (state.roundKills[id] > bestKills) { bestKills = state.roundKills[id]; best = id; }
+  }
+  if (!best) return null;
+  return `${best === 'player' ? 'You' : best} (${bestKills} kill${bestKills === 1 ? '' : 's'})`;
+}
+
+function matchMvp() {
+  let best = null;
+  let bestKills = 0;
+  for (const id of Object.keys(state.matchKills)) {
+    if (state.matchKills[id] > bestKills) { bestKills = state.matchKills[id]; best = id; }
+  }
+  if (!best) return null;
+  return `${best === 'player' ? 'You' : best} (${bestKills} kill${bestKills === 1 ? '' : 's'})`;
 }
 
 function startMatch() {
@@ -160,6 +191,8 @@ function startMatch() {
   state.deaths = 0;
   state.shotsFired = 0;
   state.shotsHit = 0;
+  state.roundKills = {};
+  state.matchKills = {};
   state.lastKillFeed = [];
   botsApi.spawnAll();
   playerApi.resetLoadout();
@@ -172,7 +205,9 @@ function ownedMap() {
   for (const id of Object.keys(player.loadout)) owned[id] = true;
   if (player.frags > 0) owned.frag = true;
   if (player.smokes > 0) owned.smoke = true;
+  if (player.flashes > 0) owned.flash = true;
   if (player.vest) owned.vest = true;
+  if (player.helmet) owned.helmet = true;
   return owned;
 }
 
@@ -180,17 +215,21 @@ function buyItem(id) {
   if (state.phase !== 'buy') return;
   const catalog = {
     vk7: WEAPONS.vk7, hornet: WEAPONS.hornet, longbow: WEAPONS.longbow,
-    frag: { price: 300 }, smoke: { price: 300 }, vest: { price: 650 },
+    frag: GRENADE_FRAG, smoke: GRENADE_SMOKE, flash: GRENADE_FLASH,
+    vest: VEST, helmet: HELMET,
   };
   const item = catalog[id];
   if (!item) return;
   if (id === 'vest' && player.vest) { audio.denied(); return; }
+  if (id === 'helmet' && player.helmet) { audio.denied(); return; }
   if ((id === 'vk7' || id === 'hornet' || id === 'longbow') && player.loadout[id]) { audio.denied(); return; }
   if (state.money < item.price) { audio.denied(); return; }
   state.money -= item.price;
   if (id === 'frag') player.frags += 1;
   else if (id === 'smoke') player.smokes += 1;
+  else if (id === 'flash') player.flashes += 1;
   else if (id === 'vest') player.vest = true;
+  else if (id === 'helmet') player.helmet = true;
   else {
     player.loadout[id] = { mag: WEAPONS[id].mag, reserve: WEAPONS[id].reserve };
     switchWeapon(id);
@@ -328,6 +367,18 @@ function fixedUpdate(dt) {
   botsApi.step(dt, state.time);
   combat.stepGrenades(dt);
 
+  // Footsteps: a short synthesized step each time the player covers
+  // 2.4 m on the ground. Two plain numbers, no allocation in the loop.
+  if (player.alive && player.body.onGround) {
+    const dx = player.body.position.x - lastStepX;
+    const dz = player.body.position.z - lastStepZ;
+    if (dx * dx + dz * dz > 5.76) {
+      lastStepX = player.body.position.x;
+      lastStepZ = player.body.position.z;
+      audio.step();
+    }
+  }
+
   // Dropped charge: the player or a Kestrel bot picks it up.
   if (state.bomb.state === 'dropped') {
     const p = player.body.position;
@@ -365,16 +416,19 @@ function fixedUpdate(dt) {
   }
 
   // Player planting: hold E inside a site while carrying the charge.
+  // Each site has its own plant time (Crane Bay 3 s, Silo Row 4 s).
   if (state.bomb.state === 'carried' && state.bomb.carrier === 'player' && player.alive) {
     const site = world.sites.find((s) => Math.hypot(player.body.position.x - s.x, player.body.position.z - s.z) < s.r);
     if (site && input.state.keys.has('KeyE')) {
       player.plantProgress += dt;
-      if (player.plantProgress >= PLANT_TIME) {
+      player.plantTarget = site.plantTime;
+      if (player.plantProgress >= site.plantTime) {
         combat.plantBomb(player, site);
         player.plantProgress = 0;
       }
     } else {
       player.plantProgress = 0;
+      player.plantTarget = 0;
     }
   }
 }
@@ -392,7 +446,7 @@ function frame(now) {
 // so holding a digit does not buy the same item every frame.
     const keys = input.state.keys;
     if (state.phase === 'buy') {
-      const buyKeys = [['Digit1', 'vk7'], ['Digit2', 'hornet'], ['Digit3', 'longbow'], ['Digit4', 'frag'], ['Digit5', 'smoke'], ['Digit6', 'vest']];
+      const buyKeys = [['Digit1', 'vk7'], ['Digit2', 'hornet'], ['Digit3', 'longbow'], ['Digit4', 'frag'], ['Digit5', 'smoke'], ['Digit6', 'vest'], ['Digit7', 'flash'], ['Digit8', 'helmet']];
       for (const [code, id] of buyKeys) {
         if (keys.has(code) && !buyEdge.has(code)) buyItem(id);
       }
@@ -415,8 +469,14 @@ function frame(now) {
         player.threwSmoke = true;
         combat.throwGrenade(player, 'smoke');
       }
+      if (keys.has('Digit7') && player.flashes > 0 && !player.threwFlash) {
+        player.flashes -= 1;
+        player.threwFlash = true;
+        combat.throwGrenade(player, 'flash');
+      }
       if (!keys.has('Digit5')) player.threwFrag = false;
       if (!keys.has('Digit6')) player.threwSmoke = false;
+      if (!keys.has('Digit7')) player.threwFlash = false;
       if (keys.has('KeyR')) {
         const ammo = player.loadout[player.weaponId];
         if (ammo && ammo.mag < WEAPONS[player.weaponId].mag && ammo.reserve > 0 && rig.reload()) audio.reload();
@@ -456,7 +516,7 @@ function frame(now) {
     else if (state.bomb.state === 'dropped') hud.setBomb('Charge: DROPPED — pick it up');
     else if (state.bomb.state === 'planted') hud.setBomb(`Charge planted — ${Math.ceil(state.bomb.fuse)}s`);
     else hud.setBomb('');
-    if (player.plantProgress > 0) hud.setBomb(`Planting… ${Math.ceil((PLANT_TIME - player.plantProgress) * 10) / 10}s`);
+    if (player.plantProgress > 0) hud.setBomb(`Planting… ${Math.ceil(((player.plantTarget || PLANT_TIME) - player.plantProgress) * 10) / 10}s`);
     hud.setKillfeed(state.lastKillFeed);
     hud.setCrosshairGap(6 + rig.spread(playerApi.groundSpeed(), player.crouching, zoomed) * 900);
     minimapTimer -= dt;

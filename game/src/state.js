@@ -45,7 +45,9 @@ export const WEAPONS = {
 };
 export const GRENADE_FRAG = { id: 'frag', name: 'Spark Frag', price: 300 };
 export const GRENADE_SMOKE = { id: 'smoke', name: 'Veil Smoke', price: 300 };
+export const GRENADE_FLASH = { id: 'flash', name: 'Dazzle Flash', price: 200 };
 export const VEST = { id: 'vest', name: 'Plate Vest', price: 650 };
+export const HELMET = { id: 'helmet', name: 'Ballistic Helmet', price: 350 };
 
 // ---- teams ----
 export const TEAMS = {
@@ -86,6 +88,9 @@ export function createState(seed) {
     deaths: 0,
     shotsFired: 0,
     shotsHit: 0,
+    // Per-round and per-match kill tallies, for the round MVP banner.
+    roundKills: {},
+    matchKills: {},
     lastKillFeed: [],
     banner: null, // { title, sub, until }
     time: 0,

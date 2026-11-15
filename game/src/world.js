@@ -162,12 +162,15 @@ export function createWorld(scene) {
     minimapRects,
     group,
     sites: [
-      { id: 'A', name: 'Crane Bay', x: -16, z: -11, r: 4.5 },
-      { id: 'B', name: 'Silo Row', x: 16, z: -11, r: 4.5 },
+      // Crane Bay is a fast plant (3 s) behind pillars; Silo Row is open
+      // ground, so its plant takes a second longer (4 s) — the two sites
+      // play differently, and attackers choose by the clock, not by habit.
+      { id: 'A', name: 'Crane Bay', x: -16, z: -11, r: 4.5, plantTime: 3 },
+      { id: 'B', name: 'Silo Row', x: 16, z: -11, r: 4.5, plantTime: 4 },
     ],
     spawns: {
       kestrel: [[-4, 15], [0, 16], [4, 15], [-1, 13]],
-      warden: [[-4, -15], [0, -16], [4, -15], [1, -13]],
+      warden: [[-4, -15], [0, -16], [4, -15], [1, -13], [-8, -14]],
     },
     waypoints,
   };

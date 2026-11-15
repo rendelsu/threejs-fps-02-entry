@@ -73,6 +73,8 @@
 
   #banner { position: fixed; left: 50%; top: 26%; transform: translateX(-50%); text-align: center; }
   #banner[hidden] { display: none; }
+
+  #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
   #banner-title { font-size: 44px; font-weight: 600; letter-spacing: .04em; }
   #banner-sub { font-size: 16px; color: var(--muted); margin-top: 6px; }
 
@@ -125,12 +127,12 @@
 <div id="overlay" class="overlay">
   <section class="panel" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
     <h1 id="overlay-title">DUSTFALL</h1>
-    <p id="overlay-copy">Kestrel Yard at dusk. Plant the charge on Crane Bay or Silo Row — or wipe the Wardens out. First to 5 rounds takes the yard.</p>
+    <p id="overlay-copy">Kestrel Yard at dusk, 5v5. Plant the charge on Crane Bay (fast plant) or Silo Row (longer, open plant) — or wipe the Wardens out. First to 5 rounds takes the yard.</p>
     <div id="buy-list"></div>
     <button id="play" type="button">Click to play</button>
     <ul class="keys" id="keys-list">
       <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move &nbsp; <kbd>Mouse</kbd> Look &nbsp; <kbd>Click</kbd> Fire &nbsp; <kbd>R</kbd> Reload</li>
-      <li><kbd>1</kbd>–<kbd>4</kbd> Weapons &nbsp; <kbd>5</kbd> Frag &nbsp; <kbd>6</kbd> Smoke &nbsp; <kbd>E</kbd> Plant (hold, on a site)</li>
+      <li><kbd>1</kbd>–<kbd>4</kbd> Weapons &nbsp; <kbd>5</kbd> Frag &nbsp; <kbd>6</kbd> Smoke &nbsp; <kbd>7</kbd> Flash &nbsp; <kbd>E</kbd> Plant (hold, on a site)</li>
       <li><kbd>Ctrl</kbd> Crouch &nbsp; <kbd>Space</kbd> Jump &nbsp; <kbd>Right-click</kbd> Zoom (DMR)</li>
     </ul>
   </section>

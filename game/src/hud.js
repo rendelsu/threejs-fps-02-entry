@@ -1,7 +1,7 @@
 // HUD: health, ammo, money, timer, score, kill feed, hitmarker, the buy
 // menu, round banners and a live minimap. Pure DOM and one 2D canvas;
 // the game never rebuilds these nodes in the loop, it only writes text.
-import { WEAPONS, GRENADE_FRAG, GRENADE_SMOKE, VEST } from './state.js';
+import { WEAPONS, GRENADE_FRAG, GRENADE_SMOKE, GRENADE_FLASH, VEST, HELMET } from './state.js';
 
 export function createHud(world) {
   const $ = (id) => document.getElementById(id);
@@ -27,6 +27,8 @@ export function createHud(world) {
     { key: '4', id: 'frag', name: GRENADE_FRAG.name, price: GRENADE_FRAG.price, desc: 'Frag grenade — press 4 to throw' },
     { key: '5', id: 'smoke', name: GRENADE_SMOKE.name, price: GRENADE_SMOKE.price, desc: 'Smoke grenade — press 5 to throw' },
     { key: '6', id: 'vest', name: VEST.name, price: VEST.price, desc: 'Halves all damage taken' },
+    { key: '7', id: 'flash', name: GRENADE_FLASH.name, price: GRENADE_FLASH.price, desc: 'Flash grenade — press 7 to throw; blinds anyone facing it' },
+    { key: '8', id: 'helmet', name: HELMET.name, price: HELMET.price, desc: 'Halves headshot damage' },
   ];
 
   function renderBuy(money, owned) {
@@ -119,6 +121,25 @@ export function createHud(world) {
     }
   }
 
+  // A flash grenade whites out the screen, fading over the given seconds.
+  // The element is created once and reused; the fade runs on CSS, so no
+  // per-frame work is needed to clear it.
+  let flashEl = null;
+  let flashTimer = null;
+  function flashBlind(seconds) {
+    if (!flashEl) {
+      flashEl = document.createElement('div');
+      flashEl.id = 'flash';
+      document.getElementById('hud').appendChild(flashEl);
+    }
+    flashEl.style.transition = 'none';
+    flashEl.style.opacity = '0.95';
+    if (flashTimer) clearTimeout(flashTimer);
+    flashEl.style.transition = `opacity ${seconds}s linear`;
+    requestAnimationFrame(() => { flashEl.style.opacity = '0'; });
+    flashTimer = setTimeout(() => { flashEl.style.opacity = '0'; }, seconds * 1000 + 50);
+  }
+
   return {
     setAmmo(mag, reserve, reloading) {
       els.ammoMag.textContent = mag;
@@ -168,6 +189,7 @@ export function createHud(world) {
     },
     hideBanner() { els.banner.hidden = true; },
     showOverlay, hideOverlay() { els.overlay.hidden = true; },
+    flashBlind,
     onPlay(fn) { els.play.addEventListener('click', fn); },
     onBuy(fn) { els.buyList.addEventListener('click', (e) => { const b = e.target.closest('[data-buy]'); if (b) fn(b.dataset.buy); }); },
     drawMinimap,

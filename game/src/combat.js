@@ -177,7 +177,7 @@ export function createCombat(state, world, scene, audio) {
     }
     let died = false;
     if (target.kind === 'player') {
-      died = target.damage ? target.damage(amount) : false;
+      died = target.damage ? target.damage(amount, part) : false;
     } else {
       target.health -= amount;
       if (target.health <= 0) { target.health = 0; target.alive = false; died = true; }
@@ -193,6 +193,12 @@ export function createCombat(state, world, scene, audio) {
     const feed = `${attacker.kind === 'player' ? 'You' : attacker.id} ${part === 'head' ? '◉' : '×'} ${victim.kind === 'player' ? 'You' : victim.id}`;
     state.lastKillFeed.unshift(feed);
     if (state.lastKillFeed.length > 5) state.lastKillFeed.pop();
+    // Round and match kill tallies, for the round MVP banner.
+    if (attacker) {
+      const id = attacker.kind === 'player' ? 'player' : attacker.id;
+      state.roundKills[id] = (state.roundKills[id] || 0) + 1;
+      state.matchKills[id] = (state.matchKills[id] || 0) + 1;
+    }
     if (attacker.kind === 'player') {
       state.kills += 1;
       state.money += 300;
@@ -292,9 +298,41 @@ export function createCombat(state, world, scene, audio) {
     return true;
   }
 
+  // A flash detonation: the player is blinded in proportion to how close
+  // they are and how squarely they face the blast; bots that can see the
+  // burst freeze for a couple of seconds. Looking away is a real defence.
+  function explodeFlash(g) {
+    const p = state.player;
+    if (p && p.alive) {
+      const dx = g.pos.x - p.body.position.x;
+      const dz = g.pos.z - p.body.position.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 26) {
+        const fwdX = -Math.sin(p.yaw);
+        const fwdZ = -Math.cos(p.yaw);
+        const facing = (dx * fwdX + dz * fwdZ) / (dist || 1);
+        if (facing > 0.15) {
+          const dur = Math.max(0.4, Math.min(2.8, 2.8 * (1 - dist / 26) * (0.5 + facing)));
+          if (state.flashBlind) state.flashBlind(dur);
+        }
+      }
+    }
+    for (const bot of state.bots) {
+      if (!bot.alive) continue;
+      const dx = g.pos.x - bot.body.position.x;
+      const dz = g.pos.z - bot.body.position.z;
+      if (Math.hypot(dx, dz) > 20) continue;
+      if (!hasLineOfSight(bot.body.position.x, bot.body.position.y + 1.5, bot.body.position.z, g.pos.x, g.pos.y, g.pos.z)) continue;
+      bot.ai.blindUntil = state.time + 2.2;
+    }
+    emitNoise(g.pos.x, g.pos.z, 30);
+    audio.flashPop();
+  }
+
   function explodeGrenade(g) {
     g.active = false;
     g.mesh.visible = false;
+    if (g.kind === 'flash') { explodeFlash(g); return; }
     if (g.kind === 'frag') {
       flashMesh.position.copy(g.pos);
       flashMesh.visible = true;
